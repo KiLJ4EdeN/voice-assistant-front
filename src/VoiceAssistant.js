@@ -2,19 +2,40 @@ import React, { useState, useEffect, useRef } from 'react';
 import Recorder from 'recorder-js';
 import './VoiceAssistant.css';
 
+const PersianCommands = {
+  انتقال: 'transfer',
+  شارژ: 'mobileCharge',
+  چک: 'checkNumberValidation',
+  موجودی: 'remainderCheck'
+};
+
+const commandDetailsSchema = {
+  transfer: [
+    { label: 'Source Account' },
+    { label: 'Destination Account' },
+    { label: 'Amount' }
+  ],
+  mobileCharge: [
+    { label: 'Number' },
+    { label: 'Amount' }
+  ],
+  checkNumberValidation: [
+    { label: 'Check Number' }
+  ],
+  remainderCheck: [
+    { label: 'Source Account' }
+  ]
+};
+
 function VoiceAssistant() {
   const [recording, setRecording] = useState(false);
   const [audioURL, setAudioURL] = useState('');
   const [blob, setBlob] = useState(null);
-  const [stage, setStage] = useState(1);
+  const [stage, setStage] = useState(0);
   const [extractedText, setExtractedText] = useState([]);
   const [commands, setCommands] = useState([]);
-  const [commandDetails, setCommandDetails] = useState({
-    transfer: { sourceAccount: '', destinationAccount: '', amount: '' },
-    mobileCharge: { number: '', amount: '' },
-    checkNumberValidation: { checkNumber: '' },
-    remainderCheck: { sourceAccount: '' }
-  });
+  const [commandDetails, setCommandDetails] = useState({});
+  const [commandValid, setCommandValid] = useState(true);
   const recorderRef = useRef(null);
 
   useEffect(() => {
@@ -29,7 +50,7 @@ function VoiceAssistant() {
         recorderRef.current.start();
         setRecording(true);
       })
-      .catch(err => console.log('Uh oh... unable to get stream...', err));
+      .catch(err => console.error('Error accessing microphone:', err));
   };
 
   const stopRecording = () => {
@@ -39,7 +60,8 @@ function VoiceAssistant() {
           setAudioURL(URL.createObjectURL(blob));
           setBlob(blob);
           setRecording(false);
-        });
+        })
+        .catch(err => console.error('Error stopping recording:', err));
     }
   };
 
@@ -48,76 +70,47 @@ function VoiceAssistant() {
       const formData = new FormData();
       formData.append('file', blob, 'recording.wav');
 
-      fetch(`${process.env.REACT_APP_API_URL}?is_command=true`, {
-        method: 'POST',
-        body: formData,
-      })
-      .then((response) => {
-        if (response.ok) {
-          return response.json();
-        } else {
-          console.error('Failed to upload audio');
+      try {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}?is_command=${commands.length === 0}`, {
+          method: 'POST',
+          body: formData,
+        });
+        if (!response.ok) {
+          throw new Error('Failed to upload audio');
         }
-      })
-      .then((data) => {
-        if (data) {
-          console.log('Command extracted:', data.command);
-          console.log('Voice extracted:', data.extracted_audio);
-          setExtractedText([...extractedText, data.extracted_audio]);
-          console.log('Audio uploaded successfully');
-          if (!['transfer', 'mobileCharge', 'checkNumberValidation', 'remainderCheck'].includes(data.command)) {
-            console.error('Invalid command:', data.command);
-            alert('Invalid command! Please record again.');
-            return;
-          }
-          const newCommands = [...commands];
-          newCommands.push(data.command);
-          setCommands(newCommands);
-          setCommandDetails(prevState => ({
-            ...prevState,
-            [data.command]: data.details
-          }));
-          setStage(stage + 1);
+        const data = await response.json();
+        if (!data || !data.command) {
+          throw new Error('No command extracted');
         }
-      })
-      .catch((error) => {
+        const englishCommand = PersianCommands[data.command];
+        if (!englishCommand) {
+          setCommandValid(false);
+          return;
+        }
+        setExtractedText([...extractedText, data.extracted_audio]);
+        setCommands([englishCommand]);
+        setCommandDetails({ [englishCommand]: {} });
+        setStage(0);
+      } catch (error) {
         console.error('Error occurred:', error);
-      });
+      }
     }
   };
 
-  const download = () => {
-    if (blob) {
-      Recorder.download(blob, 'my-audio-file'); 
-    }
-  };
-
-  const handleCommandStages = (command) => {
-    switch (command) {
-      case 'transfer':
-        if (stage === 1) {
-          return `Provide source account name: ${commandDetails[command].sourceAccount}`;
-        } else if (stage === 2) {
-          return `Provide destination account: ${commandDetails[command].destinationAccount}, and amount: ${commandDetails[command].amount}`;
-        }
-        break;
-      case 'mobileCharge':
-        if (stage === 1) {
-          return `Provide number: ${commandDetails[command].number}, and amount: ${commandDetails[command].amount}`;
-        }
-        break;
-      case 'checkNumberValidation':
-        if (stage === 1) {
-          return `Provide check number: ${commandDetails[command].checkNumber}`;
-        }
-        break;
-      case 'remainderCheck':
-        if (stage === 1) {
-          return `Provide source account name: ${commandDetails[command].sourceAccount}`;
-        }
-        break;
-      default:
-        return '';
+  const handleNextStage = (value) => {
+    const command = commands[0];
+    const key = commandDetailsSchema[command][stage].label;
+    setCommandDetails(prevState => ({
+      ...prevState,
+      [command]: { ...prevState[command], [key]: value }
+    }));
+    if (stage + 1 < commandDetailsSchema[command].length) {
+      setStage(stage + 1);
+    } else {
+      setStage(0);
+      setCommands([]);
+      setCommandDetails({});
+      setCommandValid(true);
     }
   };
 
@@ -135,8 +128,7 @@ function VoiceAssistant() {
         )}
         {audioURL && (
           <>
-            <button onClick={handleSubmit}>Submit Recording</button>
-            <button onClick={download}>Download Recording</button>
+            <button onClick={handleSubmit} disabled={commands.length > 0}>Submit Recording</button>
           </>
         )}
       </div>
@@ -150,15 +142,15 @@ function VoiceAssistant() {
           Stage {index + 1}: {text}
         </p>
       ))}
-      {stage <= 3 && (
+      {!commandValid && (
         <p>
-          {handleCommandStages(commands[commands.length - 1])}
+          Invalid command! Please record again.
         </p>
       )}
-      {stage > 3 && (
-        <p>
-          All stages completed. Thank you!
-        </p>
+      {commands.length > 0 && commandValid && (
+        <div>
+          <p>{commandDetailsSchema[commands[0]][stage].label}:</p>
+        </div>
       )}
     </div>
   );
