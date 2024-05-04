@@ -6,9 +6,15 @@ function VoiceAssistant() {
   const [recording, setRecording] = useState(false);
   const [audioURL, setAudioURL] = useState('');
   const [blob, setBlob] = useState(null);
-  const [stage, setStage] = useState(1); // Add state variable for stage
-  const [extractedText, setExtractedText] = useState([]); // State variable to hold extracted text from each stage
-  const [commands, setCommands] = useState([]); // State variable to hold the commands history
+  const [stage, setStage] = useState(1);
+  const [extractedText, setExtractedText] = useState([]);
+  const [commands, setCommands] = useState([]);
+  const [commandDetails, setCommandDetails] = useState({
+    transfer: { sourceAccount: '', destinationAccount: '', amount: '' },
+    mobileCharge: { number: '', amount: '' },
+    checkNumberValidation: { checkNumber: '' },
+    remainderCheck: { sourceAccount: '' }
+  });
   const recorderRef = useRef(null);
 
   useEffect(() => {
@@ -41,28 +47,36 @@ function VoiceAssistant() {
     if (blob) {
       const formData = new FormData();
       formData.append('file', blob, 'recording.wav');
-  
-      // Replace 'YOUR_ENDPOINT' with your actual endpoint
-      fetch(process.env.REACT_APP_API_URL, {
+
+      fetch(`${process.env.REACT_APP_API_URL}?is_command=true`, {
         method: 'POST',
         body: formData,
       })
       .then((response) => {
         if (response.ok) {
-          return response.json(); // Parse the JSON in the response
+          return response.json();
         } else {
           console.error('Failed to upload audio');
         }
       })
       .then((data) => {
         if (data) {
-          console.log(data.extracted_audio); // Log the extracted_text from response JSON
-          setExtractedText([...extractedText, data.extracted_audio]); // Update the extracted text state for the current stage
+          console.log('Command extracted:', data.command);
+          console.log('Voice extracted:', data.extracted_audio);
+          setExtractedText([...extractedText, data.extracted_audio]);
           console.log('Audio uploaded successfully');
-          // Proceed to the next stage and update commands history
+          if (!['transfer', 'mobileCharge', 'checkNumberValidation', 'remainderCheck'].includes(data.command)) {
+            console.error('Invalid command:', data.command);
+            alert('Invalid command! Please record again.');
+            return;
+          }
           const newCommands = [...commands];
-          newCommands.push(data.cmd);
+          newCommands.push(data.command);
           setCommands(newCommands);
+          setCommandDetails(prevState => ({
+            ...prevState,
+            [data.command]: data.details
+          }));
           setStage(stage + 1);
         }
       })
@@ -71,17 +85,40 @@ function VoiceAssistant() {
       });
     }
   };
-  
 
   const download = () => {
     if (blob) {
-      Recorder.download(blob, 'my-audio-file'); // downloads a .wav file
+      Recorder.download(blob, 'my-audio-file'); 
     }
   };
 
-  // Helper function to get the command history for a specific stage
-  const getCommandHistory = (stageNum) => {
-    return commands.slice(0, stageNum);
+  const handleCommandStages = (command) => {
+    switch (command) {
+      case 'transfer':
+        if (stage === 1) {
+          return `Provide source account name: ${commandDetails[command].sourceAccount}`;
+        } else if (stage === 2) {
+          return `Provide destination account: ${commandDetails[command].destinationAccount}, and amount: ${commandDetails[command].amount}`;
+        }
+        break;
+      case 'mobileCharge':
+        if (stage === 1) {
+          return `Provide number: ${commandDetails[command].number}, and amount: ${commandDetails[command].amount}`;
+        }
+        break;
+      case 'checkNumberValidation':
+        if (stage === 1) {
+          return `Provide check number: ${commandDetails[command].checkNumber}`;
+        }
+        break;
+      case 'remainderCheck':
+        if (stage === 1) {
+          return `Provide source account name: ${commandDetails[command].sourceAccount}`;
+        }
+        break;
+      default:
+        return '';
+    }
   };
 
   return (
@@ -108,29 +145,16 @@ function VoiceAssistant() {
           <audio controls src={audioURL} />
         </div>
       )}
-      {/* Display extracted text from each stage */}
       {extractedText.map((text, index) => (
         <p key={index}>
           Stage {index + 1}: {text}
         </p>
       ))}
-      {/* Display appropriate message based on the current stage and command history */}
-      {stage === 1 && (
+      {stage <= 3 && (
         <p>
-          {getCommandHistory(1).length === 0 ? 'Provide command' : `Provide ${getCommandHistory(1)[0]} details`}
+          {handleCommandStages(commands[commands.length - 1])}
         </p>
       )}
-      {stage === 2 && (
-        <p>
-          {getCommandHistory(2).length === 1 ? `Provide ${getCommandHistory(2)[0]} details` : `Provide ${getCommandHistory(2)[1]} details`}
-        </p>
-      )}
-      {stage === 3 && (
-        <p>
-          Provide additional details
-        </p>
-      )}
-      {/* Display final message at the last stage */}
       {stage > 3 && (
         <p>
           All stages completed. Thank you!
