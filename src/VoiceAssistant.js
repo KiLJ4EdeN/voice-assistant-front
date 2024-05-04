@@ -2,12 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Recorder from 'recorder-js';
 import './VoiceAssistant.css';
 
-// plan
-// do step by step
-// step 0: get command correctly only and throw error if it not right
-// step 0: also show the command selected is: command, have it as a state
-
-// mapping
+// Mapping Persian commands to English
 const PersianCommands = {
   انتقال: 'transfer',
   شارژ: 'mobileCharge',
@@ -15,7 +10,7 @@ const PersianCommands = {
   موجودی: 'remainderCheck'
 };
 
-// steps mapping
+// Mapping commands to their details
 const commandDetailsSchema = {
   transfer: [
     { label: 'Source Account' },
@@ -35,7 +30,6 @@ const commandDetailsSchema = {
 };
 
 function VoiceAssistant() {
-  // revisit later
   const [recording, setRecording] = useState(false);
   const [audioURL, setAudioURL] = useState('');
   const [blob, setBlob] = useState(null);
@@ -55,7 +49,6 @@ function VoiceAssistant() {
       console.log(`command locked: ${command}`);
     }
   }, [command]);
-  
 
   const startRecording = () => {
     navigator.mediaDevices.getUserMedia({ audio: true })
@@ -79,13 +72,11 @@ function VoiceAssistant() {
     }
   };
 
-
-  // main logic
   const handleSubmit = async () => {
     if (blob) {
       const formData = new FormData();
       formData.append('file', blob, 'recording.wav');
-      // if stage is 0, do command setting
+      
       if (stage === 0){
         console.log(`stage ${stage}: setting command interface...`)
         try {
@@ -104,16 +95,11 @@ function VoiceAssistant() {
           console.log(`raw text: ${data.extracted_audio}`)
           console.log(`command extracted: ${data.command}`)
           console.log(`command english: ${PersianCommands[data.command]}`)
-          // command length: 0
-          // command extracted: انتقال
-          // command english: transfer
           if (!englishCommand) {
             setCommandValid(false);
             return;
           } else {
-            // command is valid set it
             setCommand(PersianCommands[data.command]);
-            // increment stage
             setStage(1)
             return;
           }
@@ -122,7 +108,6 @@ function VoiceAssistant() {
         }
       } else {
         console.log(`command is set, gathering info @stage: ${stage}`)
-        // get command stage index, and proceed
         let query = commandDetailsSchema[command][stage-1].label
         const response = await fetch(`${process.env.REACT_APP_API_URL}?is_command=false`, {
           method: 'POST',
@@ -135,10 +120,9 @@ function VoiceAssistant() {
         if (!data) {
           throw new Error('No data extracted');
         }
-        // no validation for now
         setExtractedText([...extractedText, data.extracted_audio]);
         console.log(`text for query: ${query} : ${data.extracted_audio}`)
-        setStage(stage+1) // increment stage
+        setStage(stage+1)
         return;
       }
     }
@@ -151,15 +135,10 @@ function VoiceAssistant() {
         {!recording ? (
           <button onClick={startRecording} disabled={command && (stage - 1 >= (commandDetailsSchema[command] || []).length)}>Start Recording</button>
         ) : (
-          <>
-            <button onClick={stopRecording}>Stop Recording</button>
-            <button disabled>Recording...</button>
-          </>
+          <button onClick={stopRecording}>Stop Recording</button>
         )}
         {audioURL && (
-          <>
-            <button onClick={handleSubmit} disabled={command && (stage - 1 >= (commandDetailsSchema[command] || []).length)}>Submit Recording</button>
-          </>
+          <button onClick={handleSubmit} disabled={command && (stage - 1 >= (commandDetailsSchema[command] || []).length)}>Submit Recording</button>
         )}
       </div>
       {audioURL && (
