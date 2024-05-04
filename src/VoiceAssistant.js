@@ -41,12 +41,8 @@ function VoiceAssistant() {
   const [blob, setBlob] = useState(null);
   const [stage, setStage] = useState(0);
   const [command, setCommand] = useState('');
-  const [commandValid, setCommandValid] = useState(true);
-
-
   const [extractedText, setExtractedText] = useState([]);
-  const [commands, setCommands] = useState([]);
-  const [commandDetails, setCommandDetails] = useState({});
+  const [commandValid, setCommandValid] = useState(true);
   const recorderRef = useRef(null);
 
   useEffect(() => {
@@ -88,10 +84,10 @@ function VoiceAssistant() {
   const handleSubmit = async () => {
     if (blob) {
       const formData = new FormData();
+      formData.append('file', blob, 'recording.wav');
       // if stage is 0, do command setting
       if (stage === 0){
         console.log(`stage ${stage}: setting command interface...`)
-        formData.append('file', blob, 'recording.wav');
         try {
           const response = await fetch(`${process.env.REACT_APP_API_URL}?is_command=true`, {
             method: 'POST',
@@ -105,6 +101,7 @@ function VoiceAssistant() {
             throw new Error('No command extracted');
           }
           const englishCommand = PersianCommands[data.command];
+          console.log(`raw text: ${data.extracted_audio}`)
           console.log(`command extracted: ${data.command}`)
           console.log(`command english: ${PersianCommands[data.command]}`)
           // command length: 0
@@ -116,6 +113,8 @@ function VoiceAssistant() {
           } else {
             // command is valid set it
             setCommand(PersianCommands[data.command]);
+            // increment stage
+            setStage(1)
             return;
           }
         } catch (error) {
@@ -123,29 +122,25 @@ function VoiceAssistant() {
         }
       } else {
         console.log(`command is set, gathering info @stage: ${stage}`)
+        // get command stage index, and proceed
+        let query = commandDetailsSchema[command][stage-1].label
+        const response = await fetch(`${process.env.REACT_APP_API_URL}?is_command=false`, {
+          method: 'POST',
+          body: formData,
+        });
+        if (!response.ok) {
+          throw new Error('Failed to upload audio');
+        }
+        const data = await response.json();
+        if (!data) {
+          throw new Error('No data extracted');
+        }
+        // no validation for now
+        setExtractedText([...extractedText, data.extracted_audio]);
+        console.log(`text for query: ${query} : ${data.extracted_audio}`)
+        setStage(stage+1) // increment stage
+        return;
       }
-        // // invalid command works for now
-        // setExtractedText([...extractedText, data.extracted_audio]);
-        // setCommands([englishCommand]);
-        // setCommandDetails({ [englishCommand]: {} });
-        // setStage(0);
-    }
-  };
-
-  const handleNextStage = (value) => {
-    const command = commands[0];
-    const key = commandDetailsSchema[command][stage].label;
-    setCommandDetails(prevState => ({
-      ...prevState,
-      [command]: { ...prevState[command], [key]: value }
-    }));
-    if (stage + 1 < commandDetailsSchema[command].length) {
-      setStage(stage + 1);
-    } else {
-      setStage(0);
-      setCommands([]);
-      setCommandDetails({});
-      setCommandValid(true);
     }
   };
 
@@ -154,7 +149,7 @@ function VoiceAssistant() {
       <h2>Voice Assistant</h2>
       <div className="voice-assistant-buttons">
         {!recording ? (
-          <button onClick={startRecording}>Start Recording</button>
+          <button onClick={startRecording} disabled={command && (stage - 1 >= (commandDetailsSchema[command] || []).length)}>Start Recording</button>
         ) : (
           <>
             <button onClick={stopRecording}>Stop Recording</button>
@@ -163,7 +158,7 @@ function VoiceAssistant() {
         )}
         {audioURL && (
           <>
-            <button onClick={handleSubmit} disabled={commands.length > 0}>Submit Recording</button>
+            <button onClick={handleSubmit} disabled={command && (stage - 1 >= (commandDetailsSchema[command] || []).length)}>Submit Recording</button>
           </>
         )}
       </div>
@@ -173,24 +168,17 @@ function VoiceAssistant() {
         </div>
       )}
       {command !== '' && (
-        <p>
-          Command selected: {command}
-        </p>
+        <div>
+          <p>Command selected: {command}</p>
+          {stage > 0 && stage <= commandDetailsSchema[command].length && (
+            <p>Say This: {commandDetailsSchema[command][stage - 1].label}</p>
+          )}
+        </div>
       )}
-      {extractedText.map((text, index) => (
-        <p key={index}>
-          Stage {index + 1}: {text}
-        </p>
-      ))}
       {!commandValid && (
         <p>
           Invalid command! Please record again.
         </p>
-      )}
-      {commands.length > 0 && commandValid && (
-        <div>
-          <p>{commandDetailsSchema[commands[0]][stage].label}:</p>
-        </div>
       )}
     </div>
   );
