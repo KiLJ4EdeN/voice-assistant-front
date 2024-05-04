@@ -146,13 +146,15 @@ function VoiceAssistant() {
           <audio controls src={audioURL} />
         </div>
       )}
-      {command !== '' && (
+      {command !== '' ? (
         <div>
           <p>Command selected: {command}</p>
           {stage > 0 && stage <= commandDetailsSchema[command].length && (
             <p>Say This: {commandDetailsSchema[command][stage - 1].label}</p>
           )}
         </div>
+      ) : (
+        <p>Speak Your Command</p>
       )}
       {!commandValid && (
         <p>
@@ -161,7 +163,7 @@ function VoiceAssistant() {
       )}
       {extractedText.length > 0 && (
         <div>
-          <h3>Extracted Texts:</h3>
+          <h3>Results:</h3>
           <ul>
             {extractedText.map((text, index) => (
               <li key={index}>
@@ -169,6 +171,11 @@ function VoiceAssistant() {
               </li>
             ))}
           </ul>
+          {(stage - 1 >= (commandDetailsSchema[command] || []).length) && (
+            <p>
+              Do you Confirm This?
+            </p>
+          )}
         </div>
       )}
     </div>
