@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Recorder from 'recorder-js';
 import './VoiceAssistant.css';
+import { wordsToNumber } from "@persian-tools/persian-tools";
 
 // Mapping Persian commands to English
 const PersianCommands = {
@@ -13,19 +14,19 @@ const PersianCommands = {
 // Mapping commands to their details
 const commandDetailsSchema = {
   transfer: [
-    { label: 'Source Account' },
-    { label: 'Destination Account' },
-    { label: 'Amount' }
+    { label: 'Source Account', is_num: false },
+    { label: 'Destination Account', is_num: false },
+    { label: 'Amount', is_num: true }
   ],
   mobileCharge: [
-    { label: 'Number' },
-    { label: 'Amount' }
+    { label: 'Number', is_num: false }, // cant handle it yet
+    { label: 'Amount', is_num: false }
   ],
   checkNumberValidation: [
-    { label: 'Check Number' }
+    { label: 'Check Number', is_num: false } // cant handle yet
   ],
   remainderCheck: [
-    { label: 'Source Account' }
+    { label: 'Source Account', is_num: false }
   ]
 };
 
@@ -109,6 +110,7 @@ function VoiceAssistant() {
       } else {
         console.log(`command is set, gathering info @stage: ${stage}`)
         let query = commandDetailsSchema[command][stage-1].label
+        let is_num = commandDetailsSchema[command][stage-1].is_num
         const response = await fetch(`${process.env.REACT_APP_API_URL}?is_command=false`, {
           method: 'POST',
           body: formData,
@@ -120,8 +122,13 @@ function VoiceAssistant() {
         if (!data) {
           throw new Error('No data extracted');
         }
-        setExtractedText([...extractedText, data.extracted_audio]);
-        console.log(`text for query: ${query} : ${data.extracted_audio}`)
+        let extracted_audio = data.extracted_audio;
+        // convert to number if field is numeric
+        if (is_num) {
+          extracted_audio = wordsToNumber(extracted_audio);
+        }
+        setExtractedText([...extractedText, extracted_audio]);
+        console.log(`text for query: ${query} : ${extracted_audio}`)
         setStage(stage+1)
         return;
       }
