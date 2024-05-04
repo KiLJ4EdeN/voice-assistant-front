@@ -159,6 +159,18 @@ function VoiceAssistant() {
           Invalid command! Please record again.
         </p>
       )}
+      {extractedText.length > 0 && (
+        <div>
+          <h3>Extracted Texts:</h3>
+          <ul>
+            {extractedText.map((text, index) => (
+              <li key={index}>
+                {commandDetailsSchema[command][index].label}: {text}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
