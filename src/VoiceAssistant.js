@@ -2,19 +2,53 @@ import React, { useState, useEffect, useRef } from 'react';
 import Recorder from 'recorder-js';
 import './VoiceAssistant.css';
 
+// Mapping Persian commands to English
+const PersianCommands = {
+  انتقال: 'transfer',
+  شارژ: 'mobileCharge',
+  چک: 'checkNumberValidation',
+  موجودی: 'remainderCheck'
+};
+
+// Mapping commands to their details
+const commandDetailsSchema = {
+  transfer: [
+    { label: 'Source Account' },
+    { label: 'Destination Account' },
+    { label: 'Amount' }
+  ],
+  mobileCharge: [
+    { label: 'Number' },
+    { label: 'Amount' }
+  ],
+  checkNumberValidation: [
+    { label: 'Check Number' }
+  ],
+  remainderCheck: [
+    { label: 'Source Account' }
+  ]
+};
+
 function VoiceAssistant() {
   const [recording, setRecording] = useState(false);
   const [audioURL, setAudioURL] = useState('');
   const [blob, setBlob] = useState(null);
-  const [stage, setStage] = useState(1); // Add state variable for stage
-  const [extractedText, setExtractedText] = useState([]); // State variable to hold extracted text from each stage
-  const [commands, setCommands] = useState([]); // State variable to hold the commands history
+  const [stage, setStage] = useState(0);
+  const [command, setCommand] = useState('');
+  const [extractedText, setExtractedText] = useState([]);
+  const [commandValid, setCommandValid] = useState(true);
   const recorderRef = useRef(null);
 
   useEffect(() => {
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
     recorderRef.current = new Recorder(audioContext, { numChannels: 1 });
   }, []);
+
+  useEffect(() => {
+    if (command !== '') {
+      console.log(`command locked: ${command}`);
+    }
+  }, [command]);
 
   const startRecording = () => {
     navigator.mediaDevices.getUserMedia({ audio: true })
@@ -23,7 +57,7 @@ function VoiceAssistant() {
         recorderRef.current.start();
         setRecording(true);
       })
-      .catch(err => console.log('Uh oh... unable to get stream...', err));
+      .catch(err => console.error('Error accessing microphone:', err));
   };
 
   const stopRecording = () => {
@@ -33,7 +67,8 @@ function VoiceAssistant() {
           setAudioURL(URL.createObjectURL(blob));
           setBlob(blob);
           setRecording(false);
-        });
+        })
+        .catch(err => console.error('Error stopping recording:', err));
     }
   };
 
@@ -41,47 +76,56 @@ function VoiceAssistant() {
     if (blob) {
       const formData = new FormData();
       formData.append('file', blob, 'recording.wav');
-  
-      // Replace 'YOUR_ENDPOINT' with your actual endpoint
-      fetch(process.env.REACT_APP_API_URL, {
-        method: 'POST',
-        body: formData,
-      })
-      .then((response) => {
-        if (response.ok) {
-          return response.json(); // Parse the JSON in the response
-        } else {
-          console.error('Failed to upload audio');
+      
+      if (stage === 0){
+        console.log(`stage ${stage}: setting command interface...`)
+        try {
+          const response = await fetch(`${process.env.REACT_APP_API_URL}?is_command=true`, {
+            method: 'POST',
+            body: formData,
+          });
+          if (!response.ok) {
+            throw new Error('Failed to upload audio');
+          }
+          const data = await response.json();
+          if (!data || !data.command) {
+            throw new Error('No command extracted');
+          }
+          const englishCommand = PersianCommands[data.command];
+          console.log(`raw text: ${data.extracted_audio}`)
+          console.log(`command extracted: ${data.command}`)
+          console.log(`command english: ${PersianCommands[data.command]}`)
+          if (!englishCommand) {
+            setCommandValid(false);
+            return;
+          } else {
+            setCommand(PersianCommands[data.command]);
+            setStage(1)
+            return;
+          }
+        } catch (error) {
+          console.error('Error occurred:', error);
         }
-      })
-      .then((data) => {
-        if (data) {
-          console.log(data.extracted_audio); // Log the extracted_text from response JSON
-          setExtractedText([...extractedText, data.extracted_audio]); // Update the extracted text state for the current stage
-          console.log('Audio uploaded successfully');
-          // Proceed to the next stage and update commands history
-          const newCommands = [...commands];
-          newCommands.push(data.cmd);
-          setCommands(newCommands);
-          setStage(stage + 1);
+      } else {
+        console.log(`command is set, gathering info @stage: ${stage}`)
+        let query = commandDetailsSchema[command][stage-1].label
+        const response = await fetch(`${process.env.REACT_APP_API_URL}?is_command=false`, {
+          method: 'POST',
+          body: formData,
+        });
+        if (!response.ok) {
+          throw new Error('Failed to upload audio');
         }
-      })
-      .catch((error) => {
-        console.error('Error occurred:', error);
-      });
+        const data = await response.json();
+        if (!data) {
+          throw new Error('No data extracted');
+        }
+        setExtractedText([...extractedText, data.extracted_audio]);
+        console.log(`text for query: ${query} : ${data.extracted_audio}`)
+        setStage(stage+1)
+        return;
+      }
     }
-  };
-  
-
-  const download = () => {
-    if (blob) {
-      Recorder.download(blob, 'my-audio-file'); // downloads a .wav file
-    }
-  };
-
-  // Helper function to get the command history for a specific stage
-  const getCommandHistory = (stageNum) => {
-    return commands.slice(0, stageNum);
   };
 
   return (
@@ -89,18 +133,12 @@ function VoiceAssistant() {
       <h2>Voice Assistant</h2>
       <div className="voice-assistant-buttons">
         {!recording ? (
-          <button onClick={startRecording}>Start Recording</button>
+          <button onClick={startRecording} disabled={command && (stage - 1 >= (commandDetailsSchema[command] || []).length)}>Start Recording</button>
         ) : (
-          <>
-            <button onClick={stopRecording}>Stop Recording</button>
-            <button disabled>Recording...</button>
-          </>
+          <button onClick={stopRecording}>Stop Recording</button>
         )}
         {audioURL && (
-          <>
-            <button onClick={handleSubmit}>Submit Recording</button>
-            <button onClick={download}>Download Recording</button>
-          </>
+          <button onClick={handleSubmit} disabled={command && (stage - 1 >= (commandDetailsSchema[command] || []).length)}>Submit Recording</button>
         )}
       </div>
       {audioURL && (
@@ -108,33 +146,30 @@ function VoiceAssistant() {
           <audio controls src={audioURL} />
         </div>
       )}
-      {/* Display extracted text from each stage */}
-      {extractedText.map((text, index) => (
-        <p key={index}>
-          Stage {index + 1}: {text}
-        </p>
-      ))}
-      {/* Display appropriate message based on the current stage and command history */}
-      {stage === 1 && (
+      {command !== '' && (
+        <div>
+          <p>Command selected: {command}</p>
+          {stage > 0 && stage <= commandDetailsSchema[command].length && (
+            <p>Say This: {commandDetailsSchema[command][stage - 1].label}</p>
+          )}
+        </div>
+      )}
+      {!commandValid && (
         <p>
-          {getCommandHistory(1).length === 0 ? 'Provide command' : `Provide ${getCommandHistory(1)[0]} details`}
+          Invalid command! Please record again.
         </p>
       )}
-      {stage === 2 && (
-        <p>
-          {getCommandHistory(2).length === 1 ? `Provide ${getCommandHistory(2)[0]} details` : `Provide ${getCommandHistory(2)[1]} details`}
-        </p>
-      )}
-      {stage === 3 && (
-        <p>
-          Provide additional details
-        </p>
-      )}
-      {/* Display final message at the last stage */}
-      {stage > 3 && (
-        <p>
-          All stages completed. Thank you!
-        </p>
+      {extractedText.length > 0 && (
+        <div>
+          <h3>Extracted Texts:</h3>
+          <ul>
+            {extractedText.map((text, index) => (
+              <li key={index}>
+                {commandDetailsSchema[command][index].label}: {text}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
