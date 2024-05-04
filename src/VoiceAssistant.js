@@ -38,21 +38,31 @@ function VoiceAssistant() {
     if (blob) {
       const formData = new FormData();
       formData.append('file', blob, 'recording.wav');
-
+  
       // Replace 'YOUR_ENDPOINT' with your actual endpoint
       fetch(process.env.REACT_APP_API_URL, {
         method: 'POST',
         body: formData,
-      }).then((response) => {
+      })
+      .then((response) => {
         if (response.ok) {
-          console.log(response.json().extracted_text)
-          console.log('Audio uploaded successfully');
+          return response.json(); // Parse the JSON in the response
         } else {
           console.error('Failed to upload audio');
         }
+      })
+      .then((data) => {
+        if (data) {
+          console.log(data.extracted_audio); // Log the extracted_text from response JSON
+          console.log('Audio uploaded successfully');
+        }
+      })
+      .catch((error) => {
+        console.error('Error occurred:', error);
       });
     }
   };
+  
 
   const download = () => {
     if (blob) {
