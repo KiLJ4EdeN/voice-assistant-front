@@ -1,0 +1,37 @@
+.recorder-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background-color: #4f4b4b; /* Gray background */
+  }
+  
+  h2 {
+    color: cyan; /* Cyan color for headings */
+  }
+  
+  .recorder-buttons {
+    margin-top: 20px;
+  }
+  
+  button {
+    margin: 5px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    background-color: cyan; /* Cyan background for buttons */
+    color: white; /* White text color for buttons */
+    border: none;
+    border-radius: 5px;
+  }
+  
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .audio-player {
+    margin-top: 20px;
+  }
+  
