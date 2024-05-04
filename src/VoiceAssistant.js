@@ -1,78 +1,69 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import Recorder from 'recorder-js';
 import './VoiceAssistant.css';
 
-function VoiceAssistant() { // Changed component name to VoiceAssistant
+function VoiceAssistant() {
   const [recording, setRecording] = useState(false);
   const [audioURL, setAudioURL] = useState('');
-  const audioRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
+  const [blob, setBlob] = useState(null);
+  const recorderRef = useRef(null);
 
-  const startRecording = async () => {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            sampleRate: 44100, // Set sample rate to 44.1 kHz
-            channelCount: 1, // Mono audio
-            autoGainControl: false,
-            echoCancellation: false,
-            noiseSuppression: false
-          }
-        });
-        const mediaRecorder = new MediaRecorder(stream);
-        const chunks = [];
+  useEffect(() => {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    recorderRef.current = new Recorder(audioContext, { numChannels: 1 });
+  }, []);
 
-        mediaRecorderRef.current = mediaRecorder;
-
-        mediaRecorder.ondataavailable = (e) => {
-          chunks.push(e.data);
-        };
-
-        mediaRecorder.onstop = () => {
-          const blob = new Blob(chunks, { type: 'audio/wav' });
-          const url = URL.createObjectURL(blob);
-          setAudioURL(url);
-        };
-
-        mediaRecorder.start();
+  const startRecording = () => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        recorderRef.current.init(stream);
+        recorderRef.current.start();
         setRecording(true);
-      } catch (err) {
-        console.error('Error accessing microphone:', err);
-      }
-    }
+      })
+      .catch(err => console.log('Uh oh... unable to get stream...', err));
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && recording) {
-      mediaRecorderRef.current.stop();
-      setRecording(false);
+    if (recorderRef.current) {
+      recorderRef.current.stop()
+        .then(({ blob }) => {
+          setAudioURL(URL.createObjectURL(blob));
+          setBlob(blob);
+          setRecording(false);
+        });
     }
   };
 
   const handleSubmit = async () => {
-    const audioBlob = await fetch(audioURL).then((res) => res.blob());
+    if (blob) {
+      const formData = new FormData();
+      formData.append('file', blob, 'recording.wav');
 
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'recording.wav');
+      // Replace 'YOUR_ENDPOINT' with your actual endpoint
+      fetch(process.env.REACT_APP_API_URL, {
+        method: 'POST',
+        body: formData,
+      }).then((response) => {
+        if (response.ok) {
+          console.log(response.json().extracted_text)
+          console.log('Audio uploaded successfully');
+        } else {
+          console.error('Failed to upload audio');
+        }
+      });
+    }
+  };
 
-    // Replace 'YOUR_ENDPOINT' with your actual endpoint
-    fetch(process.env.REACT_APP_API_URL, {
-      method: 'POST',
-      body: formData,
-    }).then((response) => {
-      if (response.ok) {
-        console.log(response.json().extracted_text)
-        console.log('Audio uploaded successfully');
-      } else {
-        console.error('Failed to upload audio');
-      }
-    });
+  const download = () => {
+    if (blob) {
+      Recorder.download(blob, 'my-audio-file'); // downloads a .wav file
+    }
   };
 
   return (
-    <div className="voice-assistant-container"> {/* Changed class name to voice-assistant-container */}
-      <h2>Voice Assistant</h2> {/* Changed header to Voice Assistant */}
-      <div className="voice-assistant-buttons"> {/* Changed class name to voice-assistant-buttons */}
+    <div className="voice-assistant-container">
+      <h2>Voice Assistant</h2>
+      <div className="voice-assistant-buttons">
         {!recording ? (
           <button onClick={startRecording}>Start Recording</button>
         ) : (
@@ -82,16 +73,19 @@ function VoiceAssistant() { // Changed component name to VoiceAssistant
           </>
         )}
         {audioURL && (
-          <button onClick={handleSubmit}>Submit Recording</button>
+          <>
+            <button onClick={handleSubmit}>Submit Recording</button>
+            <button onClick={download}>Download Recording</button>
+          </>
         )}
       </div>
       {audioURL && (
         <div className="audio-player">
-          <audio ref={audioRef} controls src={audioURL} />
+          <audio controls src={audioURL} />
         </div>
       )}
     </div>
   );
 }
 
-export default VoiceAssistant; // Changed export default to VoiceAssistant
+export default VoiceAssistant;
