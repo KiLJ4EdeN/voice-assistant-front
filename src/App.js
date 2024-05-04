@@ -1,10 +1,10 @@
 import React from 'react';
-import Recorder from './Recorder';
+import VoiceAssistant from './VoiceAssistant';
 
 function App() {
   return (
     <div className="App">
-      <Recorder />
+      <VoiceAssistant />
     </div>
   );
 }

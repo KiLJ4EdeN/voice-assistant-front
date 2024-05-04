@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import './Recorder.css';
+import './VoiceAssistant.css';
 
 function VoiceAssistant() { // Changed component name to VoiceAssistant
   const [recording, setRecording] = useState(false);
@@ -53,14 +53,15 @@ function VoiceAssistant() { // Changed component name to VoiceAssistant
     const audioBlob = await fetch(audioURL).then((res) => res.blob());
 
     const formData = new FormData();
-    formData.append('audio', audioBlob);
+    formData.append('file', audioBlob, 'recording.wav');
 
     // Replace 'YOUR_ENDPOINT' with your actual endpoint
-    fetch('YOUR_ENDPOINT', {
+    fetch(process.env.REACT_APP_API_URL, {
       method: 'POST',
       body: formData,
     }).then((response) => {
       if (response.ok) {
+        console.log(response.json().extracted_text)
         console.log('Audio uploaded successfully');
       } else {
         console.error('Failed to upload audio');
