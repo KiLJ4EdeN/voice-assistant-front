@@ -2,6 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import Recorder from 'recorder-js';
 import './VoiceAssistant.css';
 
+// plan
+// do step by step
+// step 0: get command correctly only and throw error if it not right
+// step 0: also show the command selected is: command, have it as a state
+
+// mapping
 const PersianCommands = {
   انتقال: 'transfer',
   شارژ: 'mobileCharge',
@@ -9,6 +15,7 @@ const PersianCommands = {
   موجودی: 'remainderCheck'
 };
 
+// steps mapping
 const commandDetailsSchema = {
   transfer: [
     { label: 'Source Account' },
@@ -28,20 +35,31 @@ const commandDetailsSchema = {
 };
 
 function VoiceAssistant() {
+  // revisit later
   const [recording, setRecording] = useState(false);
   const [audioURL, setAudioURL] = useState('');
   const [blob, setBlob] = useState(null);
   const [stage, setStage] = useState(0);
+  const [command, setCommand] = useState('');
+  const [commandValid, setCommandValid] = useState(true);
+
+
   const [extractedText, setExtractedText] = useState([]);
   const [commands, setCommands] = useState([]);
   const [commandDetails, setCommandDetails] = useState({});
-  const [commandValid, setCommandValid] = useState(true);
   const recorderRef = useRef(null);
 
   useEffect(() => {
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
     recorderRef.current = new Recorder(audioContext, { numChannels: 1 });
   }, []);
+
+  useEffect(() => {
+    if (command !== '') {
+      console.log(`command locked: ${command}`);
+    }
+  }, [command]);
+  
 
   const startRecording = () => {
     navigator.mediaDevices.getUserMedia({ audio: true })
@@ -65,35 +83,52 @@ function VoiceAssistant() {
     }
   };
 
+
+  // main logic
   const handleSubmit = async () => {
     if (blob) {
       const formData = new FormData();
-      formData.append('file', blob, 'recording.wav');
-
-      try {
-        const response = await fetch(`${process.env.REACT_APP_API_URL}?is_command=${commands.length === 0}`, {
-          method: 'POST',
-          body: formData,
-        });
-        if (!response.ok) {
-          throw new Error('Failed to upload audio');
+      // if stage is 0, do command setting
+      if (stage === 0){
+        console.log(`stage ${stage}: setting command interface...`)
+        formData.append('file', blob, 'recording.wav');
+        try {
+          const response = await fetch(`${process.env.REACT_APP_API_URL}?is_command=true`, {
+            method: 'POST',
+            body: formData,
+          });
+          if (!response.ok) {
+            throw new Error('Failed to upload audio');
+          }
+          const data = await response.json();
+          if (!data || !data.command) {
+            throw new Error('No command extracted');
+          }
+          const englishCommand = PersianCommands[data.command];
+          console.log(`command extracted: ${data.command}`)
+          console.log(`command english: ${PersianCommands[data.command]}`)
+          // command length: 0
+          // command extracted: انتقال
+          // command english: transfer
+          if (!englishCommand) {
+            setCommandValid(false);
+            return;
+          } else {
+            // command is valid set it
+            setCommand(PersianCommands[data.command]);
+            return;
+          }
+        } catch (error) {
+          console.error('Error occurred:', error);
         }
-        const data = await response.json();
-        if (!data || !data.command) {
-          throw new Error('No command extracted');
-        }
-        const englishCommand = PersianCommands[data.command];
-        if (!englishCommand) {
-          setCommandValid(false);
-          return;
-        }
-        setExtractedText([...extractedText, data.extracted_audio]);
-        setCommands([englishCommand]);
-        setCommandDetails({ [englishCommand]: {} });
-        setStage(0);
-      } catch (error) {
-        console.error('Error occurred:', error);
+      } else {
+        console.log(`command is set, gathering info @stage: ${stage}`)
       }
+        // // invalid command works for now
+        // setExtractedText([...extractedText, data.extracted_audio]);
+        // setCommands([englishCommand]);
+        // setCommandDetails({ [englishCommand]: {} });
+        // setStage(0);
     }
   };
 
@@ -136,6 +171,11 @@ function VoiceAssistant() {
         <div className="audio-player">
           <audio controls src={audioURL} />
         </div>
+      )}
+      {command !== '' && (
+        <p>
+          Command selected: {command}
+        </p>
       )}
       {extractedText.map((text, index) => (
         <p key={index}>
