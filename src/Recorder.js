@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import './Recorder.css';
 
-function Recorder() {
+function VoiceAssistant() { // Changed component name to VoiceAssistant
   const [recording, setRecording] = useState(false);
   const [audioURL, setAudioURL] = useState('');
   const audioRef = useRef(null);
@@ -10,7 +10,15 @@ function Recorder() {
   const startRecording = async () => {
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: 44100, // Set sample rate to 44.1 kHz
+            channelCount: 1, // Mono audio
+            autoGainControl: false,
+            echoCancellation: false,
+            noiseSuppression: false
+          }
+        });
         const mediaRecorder = new MediaRecorder(stream);
         const chunks = [];
 
@@ -61,9 +69,9 @@ function Recorder() {
   };
 
   return (
-    <div className="recorder-container">
-      <h2>Voice Recorder</h2>
-      <div className="recorder-buttons">
+    <div className="voice-assistant-container"> {/* Changed class name to voice-assistant-container */}
+      <h2>Voice Assistant</h2> {/* Changed header to Voice Assistant */}
+      <div className="voice-assistant-buttons"> {/* Changed class name to voice-assistant-buttons */}
         {!recording ? (
           <button onClick={startRecording}>Start Recording</button>
         ) : (
@@ -85,4 +93,4 @@ function Recorder() {
   );
 }
 
-export default Recorder;
+export default VoiceAssistant; // Changed export default to VoiceAssistant
